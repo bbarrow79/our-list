@@ -1,0 +1,668 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+<meta name="theme-color" content="#F5F0E8" />
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-title" content="Our List" />
+<link rel="manifest" href="manifest.json" />
+<title>Our List</title>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300;0,9..144,400;1,9..144,300&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet" />
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  :root {
+    --cream: #F5F0E8; --cream-dark: #EDE6D6; --ink: #1C1917; --ink-soft: #44403C;
+    --ink-muted: #78716C; --ink-faint: #A8A29E; --sage: #4A6741; --sage-light: #D4E4CF;
+    --sage-mid: #8FAF89; --terracotta: #B55E3A; --terracotta-light: #F0D5C8;
+    --gold: #C49A3C; --gold-light: #F5E6C3; --blue: #3A5F8A; --plum: #6B4B7A;
+    --border: rgba(28,25,23,0.1); --border-mid: rgba(28,25,23,0.15);
+    --shadow-soft: 0 2px 12px rgba(28,25,23,0.08); --r: 12px;
+  }
+  body { background: var(--cream); color: var(--ink); font-family: 'DM Sans', sans-serif; min-height: 100vh; font-size: 15px; line-height: 1.5; padding-bottom: env(safe-area-inset-bottom); }
+
+  /* Login */
+  #login-screen { position: fixed; inset: 0; background: var(--cream); z-index: 500; align-items: center; justify-content: center; padding: 20px; display: none; }
+  .login-box { width: 100%; max-width: 340px; }
+  .login-title { font-family: 'Fraunces', serif; font-size: 42px; font-weight: 300; margin-bottom: 6px; }
+  .login-title em { font-style: italic; color: var(--sage); }
+  .login-sub { font-size: 13px; color: var(--ink-muted); margin-bottom: 32px; }
+  .login-field { width: 100%; background: white; border: 1px solid var(--border); border-radius: 8px; padding: 12px 14px; font-family: 'DM Sans', sans-serif; font-size: 14px; outline: none; margin-bottom: 10px; }
+  .login-field:focus { border-color: var(--sage-mid); box-shadow: 0 0 0 3px rgba(74,103,65,0.1); }
+  .login-error { color: var(--terracotta); font-size: 13px; min-height: 18px; margin-bottom: 8px; }
+  .login-btn { width: 100%; background: var(--ink); color: white; border: none; border-radius: 8px; padding: 13px; font-family: 'DM Sans', sans-serif; font-size: 14px; font-weight: 500; cursor: pointer; }
+  .login-btn:hover { background: var(--ink-soft); }
+
+  /* Main app */
+  #main-app { display: none; }
+  .app { max-width: 520px; margin: 0 auto; padding: 0 20px 100px; }
+
+  /* Header */
+  header { padding: 48px 0 28px; }
+  .header-eyebrow { font-size: 11px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--ink-muted); margin-bottom: 8px; }
+  .header-title { font-family: 'Fraunces', serif; font-size: 42px; font-weight: 300; line-height: 1.05; }
+  .header-title em { font-style: italic; color: var(--sage); }
+  .header-sub { margin-top: 10px; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+  .sync-pill { display: inline-flex; align-items: center; gap: 5px; background: white; border: 1px solid var(--border); border-radius: 20px; padding: 4px 12px 4px 8px; font-size: 12px; color: var(--ink-muted); cursor: pointer; transition: all 0.15s; }
+  .sync-pill:hover { background: var(--cream-dark); }
+  .sync-dot { width: 6px; height: 6px; border-radius: 50%; background: #95a5a6; flex-shrink: 0; }
+  .sync-dot.live { background: var(--sage); animation: livepulse 2.5s infinite; }
+  .sync-dot.syncing { background: var(--gold); animation: blink 0.7s infinite; }
+  .sync-dot.err { background: var(--terracotta); }
+  @keyframes livepulse { 0%,100%{opacity:1} 50%{opacity:0.5} }
+  @keyframes blink { 0%,100%{opacity:1} 50%{opacity:0.2} }
+  .signout-btn { background: none; border: none; font-size: 12px; color: var(--ink-faint); cursor: pointer; text-decoration: underline; font-family: 'DM Sans', sans-serif; }
+
+  /* Add card */
+  .add-card { background: white; border: 1px solid var(--border); border-radius: var(--r); padding: 20px; margin-bottom: 24px; box-shadow: var(--shadow-soft); }
+  .add-card-label { font-size: 11px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--ink-faint); margin-bottom: 14px; font-weight: 500; }
+  .input-row { display: flex; gap: 8px; margin-bottom: 10px; }
+  .autocomplete-wrap { position: relative; flex: 1; min-width: 0; }
+  .autocomplete-wrap input { width: 100%; }
+  .text-input { background: var(--cream); border: 1px solid var(--border); border-radius: 8px; padding: 10px 14px; font-family: 'DM Sans', sans-serif; font-size: 14px; color: var(--ink); outline: none; transition: border-color 0.15s, box-shadow 0.15s; }
+  .text-input:focus { border-color: var(--sage-mid); box-shadow: 0 0 0 3px rgba(74,103,65,0.1); }
+  .text-input::placeholder { color: var(--ink-faint); }
+  .qty-field { width: 68px; flex-shrink: 0; text-align: center; }
+  .options-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+  .cat-select { flex: 1; background: var(--cream); border: 1px solid var(--border); border-radius: 8px; padding: 9px 30px 9px 12px; font-family: 'DM Sans', sans-serif; font-size: 13px; color: var(--ink-soft); outline: none; cursor: pointer; appearance: none; background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M0 0l5 6 5-6z' fill='%2378716C'/%3E%3C/svg%3E"); background-repeat: no-repeat; background-position: right 12px center; }
+  .cat-select:focus { border-color: var(--sage-mid); }
+  .monthly-toggle { display: flex; align-items: center; gap: 6px; cursor: pointer; white-space: nowrap; }
+  .monthly-toggle input { display: none; }
+  .monthly-toggle-track { width: 32px; height: 18px; border-radius: 9px; background: var(--border-mid); position: relative; transition: background 0.2s; flex-shrink: 0; }
+  .monthly-toggle input:checked + .monthly-toggle-track { background: var(--sage); }
+  .monthly-toggle-track::after { content: ''; position: absolute; top: 2px; left: 2px; width: 14px; height: 14px; border-radius: 50%; background: white; transition: transform 0.2s; box-shadow: 0 1px 3px rgba(0,0,0,0.2); }
+  .monthly-toggle input:checked + .monthly-toggle-track::after { transform: translateX(14px); }
+  .monthly-toggle-label { font-size: 12px; color: var(--ink-muted); }
+  .add-btn { background: var(--ink); color: white; border: none; border-radius: 8px; padding: 10px 18px; font-family: 'DM Sans', sans-serif; font-size: 13px; font-weight: 500; cursor: pointer; white-space: nowrap; transition: background 0.15s, transform 0.1s; }
+  .add-btn:hover { background: var(--ink-soft); }
+  .add-btn:active { transform: scale(0.97); }
+  .scan-btn { background: var(--cream-dark); color: var(--ink-soft); border: 1px solid var(--border-mid); border-radius: 8px; padding: 10px 12px; font-family: 'DM Sans', sans-serif; font-size: 13px; cursor: pointer; display: flex; align-items: center; gap: 6px; white-space: nowrap; transition: background 0.15s; flex-shrink: 0; }
+  .scan-btn:hover { background: #e0d8c8; }
+
+  /* Autocomplete */
+  .autocomplete-list { position: absolute; top: calc(100% + 4px); left: 0; right: 0; background: white; border: 1px solid var(--border-mid); border-radius: 10px; overflow: hidden; box-shadow: 0 8px 24px rgba(28,25,23,0.12); z-index: 100; max-height: 220px; overflow-y: auto; }
+  .autocomplete-item { display: flex; align-items: center; gap: 10px; padding: 9px 14px; cursor: pointer; font-size: 14px; color: var(--ink); transition: background 0.1s; border-bottom: 1px solid var(--border); }
+  .autocomplete-item:last-child { border-bottom: none; }
+  .autocomplete-item:hover, .autocomplete-item.highlighted { background: var(--cream); }
+  .autocomplete-item-dot { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; }
+  .autocomplete-item-name { flex: 1; }
+  .autocomplete-item-meta { font-size: 11px; color: var(--ink-faint); }
+
+  /* Filter tabs */
+  .filter-tabs { display: flex; gap: 4px; margin-bottom: 24px; background: var(--cream-dark); border-radius: 10px; padding: 4px; }
+  .filter-tab { flex: 1; text-align: center; padding: 7px 4px; border-radius: 7px; border: none; background: transparent; font-family: 'DM Sans', sans-serif; font-size: 12px; color: var(--ink-muted); cursor: pointer; transition: all 0.15s; }
+  .filter-tab.active { background: white; color: var(--ink); font-weight: 500; box-shadow: var(--shadow-soft); }
+
+  /* Items */
+  .cat-group { margin-bottom: 8px; }
+  .cat-header { display: flex; align-items: center; gap: 8px; margin: 16px 0 8px; }
+  .cat-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+  .cat-name { font-size: 11px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--ink-faint); font-weight: 500; }
+  .item { display: flex; align-items: center; gap: 12px; padding: 12px 16px; background: white; border: 1px solid var(--border); border-radius: 10px; margin-bottom: 5px; transition: opacity 0.2s; animation: slideIn 0.18s ease; }
+  @keyframes slideIn { from { opacity:0; transform: translateY(-6px); } to { opacity:1; transform:none; } }
+  .item.done { opacity: 0.42; }
+  .item.done .item-name { text-decoration: line-through; color: var(--ink-muted); }
+  .check { width: 22px; height: 22px; border-radius: 50%; border: 1.5px solid var(--border-mid); background: transparent; cursor: pointer; flex-shrink: 0; position: relative; transition: all 0.15s; }
+  .check:hover { border-color: var(--sage-mid); }
+  .check.checked { background: var(--sage); border-color: var(--sage); }
+  .check.checked::after { content: ''; position: absolute; top: 4px; left: 7px; width: 5px; height: 9px; border-right: 1.5px solid white; border-bottom: 1.5px solid white; transform: rotate(40deg); }
+  .item-name { flex: 1; font-size: 14px; color: var(--ink); }
+  .item-qty { font-size: 12px; color: var(--ink-faint); background: var(--cream-dark); padding: 2px 8px; border-radius: 6px; }
+  .badge-monthly { font-size: 10px; padding: 2px 7px; border-radius: 6px; background: var(--sage-light); color: var(--sage); font-weight: 500; flex-shrink: 0; }
+  .del { background: none; border: none; cursor: pointer; padding: 2px 4px; color: var(--ink-faint); font-size: 15px; line-height: 1; border-radius: 4px; transition: all 0.12s; opacity: 0; }
+  .item:hover .del { opacity: 1; }
+  .del:hover { color: var(--terracotta); background: var(--terracotta-light); }
+  .c-produce { background: var(--sage); } .c-dairy { background: var(--blue); }
+  .c-meat { background: var(--terracotta); } .c-pantry { background: var(--gold); }
+  .c-frozen { background: var(--plum); } .c-household { background: #7f8c8d; }
+  .c-other { background: var(--ink-faint); }
+
+  /* Empty */
+  .empty { text-align: center; padding: 48px 20px; }
+  .empty-icon { font-size: 40px; margin-bottom: 12px; opacity: 0.3; }
+  .empty-text { font-family: 'Fraunces', serif; font-size: 18px; font-weight: 300; color: var(--ink-muted); font-style: italic; }
+  .empty-sub { font-size: 13px; color: var(--ink-faint); margin-top: 6px; }
+
+  /* Footer */
+  .footer-bar { display: flex; flex-direction: column; gap: 10px; padding: 16px 0; margin-top: 20px; border-top: 1px solid var(--border); }
+  .footer-row { display: flex; justify-content: space-between; align-items: center; }
+  .count-text { font-size: 13px; color: var(--ink-faint); }
+  .clear-btn { font-size: 12px; color: var(--ink-muted); background: none; border: none; cursor: pointer; text-decoration: underline; font-family: 'DM Sans', sans-serif; }
+  .clear-btn:hover { color: var(--terracotta); }
+  .monthly-reset-btn { display: flex; align-items: center; gap: 8px; width: 100%; padding: 11px 16px; background: var(--gold-light); border: 1px solid rgba(196,154,60,0.3); border-radius: 10px; cursor: pointer; font-family: 'DM Sans', sans-serif; font-size: 13px; color: var(--ink-soft); text-align: left; transition: background 0.15s; }
+  .monthly-reset-btn:hover { background: #f0dca0; }
+  .monthly-reset-title { font-weight: 500; color: var(--ink); }
+  .monthly-reset-sub { font-size: 11px; color: var(--ink-muted); margin-top: 1px; }
+
+  /* Dialogs */
+  .overlay { position: fixed; inset: 0; background: rgba(28,25,23,0.4); display: flex; align-items: center; justify-content: center; z-index: 200; animation: fadeIn 0.15s ease; }
+  @keyframes fadeIn { from{opacity:0} to{opacity:1} }
+  .dialog { background: white; border-radius: 14px; padding: 24px; max-width: 320px; width: calc(100% - 40px); box-shadow: 0 16px 48px rgba(28,25,23,0.18); animation: slideUp 0.15s ease; }
+  @keyframes slideUp { from{transform:translateY(8px);opacity:0} to{transform:none;opacity:1} }
+  .dialog-title { font-family: 'Fraunces', serif; font-size: 20px; font-weight: 300; margin-bottom: 8px; }
+  .dialog-body { font-size: 13px; color: var(--ink-muted); line-height: 1.6; margin-bottom: 16px; }
+  .dialog-input { width: 100%; background: var(--cream); border: 1px solid var(--border); border-radius: 8px; padding: 10px 12px; font-family: 'DM Sans', sans-serif; font-size: 14px; outline: none; margin-bottom: 16px; display: none; }
+  .dialog-btns { display: flex; gap: 8px; justify-content: flex-end; }
+  .btn-cancel { background: none; border: 1px solid var(--border-mid); border-radius: 8px; padding: 8px 16px; font-family: 'DM Sans', sans-serif; font-size: 13px; cursor: pointer; color: var(--ink-muted); }
+  .btn-ok { background: var(--ink); color: white; border: none; border-radius: 8px; padding: 8px 16px; font-family: 'DM Sans', sans-serif; font-size: 13px; font-weight: 500; cursor: pointer; }
+
+  .loading { text-align: center; padding: 48px 20px; color: var(--ink-faint); font-size: 14px; }
+
+  @media (max-width: 420px) {
+    header { padding: 32px 0 20px; }
+    .header-title { font-size: 34px; }
+    .options-row { flex-wrap: wrap; }
+    .add-btn { width: 100%; text-align: center; margin-top: 4px; }
+  }
+</style>
+</head>
+<body>
+
+<!-- Login Screen -->
+<div id="login-screen">
+  <div class="login-box">
+    <div class="login-title">Our <em>List</em></div>
+    <div class="login-sub">Sign in to access your shared list</div>
+    <input type="email" id="login-email" class="login-field" placeholder="Email address" />
+    <input type="password" id="login-pass" class="login-field" placeholder="Password" />
+    <div class="login-error" id="login-error"></div>
+    <button class="login-btn" id="login-btn" onclick="doLogin()">Sign in</button>
+  </div>
+</div>
+
+<!-- Main App -->
+<div id="main-app">
+  <div class="app">
+    <header>
+      <div class="header-eyebrow">Household</div>
+      <h1 class="header-title">Our <em>List</em></h1>
+      <div class="header-sub">
+        <div class="sync-pill">
+          <span class="sync-dot" id="sync-dot"></span>
+          <span id="sync-label">Connecting…</span>
+        </div>
+        <button class="signout-btn" onclick="doSignOut()">Sign out</button>
+      </div>
+    </header>
+
+    <div class="add-card">
+      <div class="add-card-label">Add item</div>
+      <div class="input-row">
+        <div class="autocomplete-wrap">
+          <input type="text" id="item-input" class="text-input" placeholder="What do you need?" autocomplete="off" />
+          <div class="autocomplete-list" id="ac-list" style="display:none;"></div>
+        </div>
+        <input type="text" id="qty-input" class="text-input qty-field" placeholder="Qty" />
+        <label class="scan-btn">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16"><rect x="3" y="3" width="5" height="5" rx="1"/><rect x="16" y="3" width="5" height="5" rx="1"/><rect x="3" y="16" width="5" height="5" rx="1"/><line x1="16" y1="16" x2="21" y2="16"/><line x1="16" y1="19" x2="21" y2="19"/><line x1="19" y1="16" x2="19" y2="21"/></svg>
+          Scan
+          <input type="file" accept="image/*" style="display:none;" onchange="handleScanImage(event)" />
+        </label>
+      </div>
+      <div class="options-row">
+        <select id="cat-select" class="cat-select">
+          <option value="produce">🥦 Produce</option>
+          <option value="dairy">🥛 Dairy</option>
+          <option value="meat">🥩 Meat</option>
+          <option value="pantry">🫙 Pantry</option>
+          <option value="frozen">❄️ Frozen</option>
+          <option value="household">🧹 Household</option>
+          <option value="other">📦 Other</option>
+        </select>
+        <label class="monthly-toggle">
+          <input type="checkbox" id="monthly-check" />
+          <span class="monthly-toggle-track"></span>
+          <span class="monthly-toggle-label">Monthly</span>
+        </label>
+        <button class="add-btn" onclick="addItem()">Add →</button>
+      </div>
+    </div>
+
+    <div class="filter-tabs">
+      <button class="filter-tab active" onclick="setFilter('all',this)">All</button>
+      <button class="filter-tab" onclick="setFilter('active',this)">Needed</button>
+      <button class="filter-tab" onclick="setFilter('done',this)">In Cart</button>
+      <button class="filter-tab" onclick="setFilter('recurring',this)">Monthly</button>
+    </div>
+
+    <div id="list"><div class="loading">Loading your list…</div></div>
+
+    <div class="footer-bar">
+      <div class="footer-row">
+        <span class="count-text" id="count"></span>
+        <button class="clear-btn" onclick="clearChecked()">Clear checked</button>
+      </div>
+      <button class="monthly-reset-btn" onclick="confirmMonthlyReset()">
+        <span style="font-size:15px;">↺</span>
+        <span>
+          <div class="monthly-reset-title">New month reset</div>
+          <div class="monthly-reset-sub">Removes non-monthly items, unchecks monthly ones</div>
+        </span>
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- Confirm Reset Dialog -->
+<div class="overlay" id="confirm-overlay" style="display:none;" onclick="closeConfirm(event)">
+  <div class="dialog">
+    <div class="dialog-title">Start fresh?</div>
+    <div class="dialog-body">This will remove all non-monthly items and uncheck your monthly staples so they're ready to grab again.</div>
+    <div class="dialog-btns">
+      <button class="btn-cancel" onclick="closeConfirm()">Cancel</button>
+      <button class="btn-ok" onclick="doMonthlyReset()">Reset list</button>
+    </div>
+  </div>
+</div>
+
+<!-- Barcode Result Dialog -->
+<div class="overlay" id="barcode-overlay" style="display:none;" onclick="closeBarcodeDialog(event)">
+  <div class="dialog">
+    <div class="dialog-title" id="barcode-title">Looking up…</div>
+    <div class="dialog-body" id="barcode-body"></div>
+    <input type="text" id="barcode-name-edit" class="dialog-input" placeholder="Type item name..." />
+    <div class="dialog-btns">
+      <button class="btn-cancel" onclick="closeBarcodeDialog()">Cancel</button>
+      <button class="btn-ok" onclick="addBarcodeItem()">Add to list</button>
+    </div>
+  </div>
+</div>
+
+<script>
+// ── Firebase ──────────────────────────────────────────────────────
+firebase.initializeApp({
+  apiKey: "AIzaSyCmkKCdcBlvXzPFLiGWhuFV72pKXvg0f_8",
+  authDomain: "our-shopping-list-4d664.firebaseapp.com",
+  databaseURL: "https://our-shopping-list-4d664-default-rtdb.firebaseio.com",
+  projectId: "our-shopping-list-4d664",
+  storageBucket: "our-shopping-list-4d664.firebasestorage.app",
+  messagingSenderId: "848166205921",
+  appId: "1:848166205921:web:0953cd2f5f2e71942e3aa0"
+});
+
+const db = firebase.database();
+const auth = firebase.auth();
+const itemsRef = db.ref('items');
+const historyRef = db.ref('history');
+
+// ── State ─────────────────────────────────────────────────────────
+let items = [];
+let history = {};
+let filter = 'all';
+let acIndex = -1;
+let barcodeProduct = null;
+
+const CAT_COLORS = { produce:'c-produce', dairy:'c-dairy', meat:'c-meat', pantry:'c-pantry', frozen:'c-frozen', household:'c-household', other:'c-other' };
+const CAT_LABELS = { produce:'Produce', dairy:'Dairy', meat:'Meat', pantry:'Pantry', frozen:'Frozen', household:'Household', other:'Other' };
+const CAT_DOT_COLORS = { produce:'#4A6741', dairy:'#3A5F8A', meat:'#B55E3A', pantry:'#C49A3C', frozen:'#6B4B7A', household:'#7f8c8d', other:'#A8A29E' };
+
+// ── Auth ──────────────────────────────────────────────────────────
+auth.onAuthStateChanged(user => {
+  if (user) {
+    document.getElementById('login-screen').style.display = 'none';
+    document.getElementById('main-app').style.display = 'block';
+    startListening();
+  } else {
+    document.getElementById('login-screen').style.display = 'flex';
+    document.getElementById('main-app').style.display = 'none';
+  }
+});
+
+function doLogin() {
+  const email = document.getElementById('login-email').value.trim();
+  const pass = document.getElementById('login-pass').value;
+  const errEl = document.getElementById('login-error');
+  const btn = document.getElementById('login-btn');
+  errEl.textContent = '';
+  btn.textContent = 'Signing in…';
+  btn.disabled = true;
+  auth.signInWithEmailAndPassword(email, pass)
+    .catch(e => {
+      errEl.textContent = 'Invalid email or password';
+      btn.textContent = 'Sign in';
+      btn.disabled = false;
+    });
+}
+
+function doSignOut() { auth.signOut(); }
+
+document.getElementById('login-pass').addEventListener('keydown', e => {
+  if (e.key === 'Enter') doLogin();
+});
+
+// ── Firebase Listeners ────────────────────────────────────────────
+function startListening() {
+  setSyncUI('syncing', 'Connecting…');
+  itemsRef.on('value', snap => {
+    const data = snap.val();
+    items = data ? Object.values(data) : [];
+    render();
+    setSyncUI('live', 'Live');
+  }, () => setSyncUI('err', 'Offline'));
+
+  historyRef.on('value', snap => {
+    const data = snap.val();
+    if (data) history = data;
+  });
+}
+
+function setSyncUI(state, label) {
+  document.getElementById('sync-dot').className = 'sync-dot ' + state;
+  document.getElementById('sync-label').textContent = label;
+}
+
+// ── Save ──────────────────────────────────────────────────────────
+function saveItems() {
+  const obj = {};
+  items.forEach(i => { obj[i.id] = i; });
+  itemsRef.set(obj);
+}
+
+function saveHistory() { historyRef.set(history); }
+
+function historyAdd(name, cat) {
+  history[name.toLowerCase()] = { name, cat };
+  saveHistory();
+}
+
+// ── Actions ───────────────────────────────────────────────────────
+function addItem() {
+  const nameEl = document.getElementById('item-input');
+  const name = nameEl.value.trim();
+  if (!name) { nameEl.focus(); return; }
+  const qty = document.getElementById('qty-input').value.trim();
+  const cat = document.getElementById('cat-select').value;
+  const monthly = document.getElementById('monthly-check').checked;
+  items.unshift({ id: Date.now(), name, qty, cat, done: false, monthly });
+  historyAdd(name, cat);
+  nameEl.value = '';
+  document.getElementById('qty-input').value = '';
+  document.getElementById('monthly-check').checked = false;
+  document.getElementById('ac-list').style.display = 'none';
+  nameEl.focus();
+  saveItems();
+}
+
+function toggle(id) {
+  const item = items.find(i => i.id === id);
+  if (item) { item.done = !item.done; saveItems(); }
+}
+
+function remove(id) {
+  items = items.filter(i => i.id !== id);
+  saveItems();
+}
+
+function setFilter(f, btn) {
+  filter = f;
+  document.querySelectorAll('.filter-tab').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  render();
+}
+
+function clearChecked() {
+  items = items.filter(i => !i.done);
+  saveItems();
+}
+
+function confirmMonthlyReset() {
+  document.getElementById('confirm-overlay').style.display = 'flex';
+}
+function closeConfirm(e) {
+  if (!e || e.target === document.getElementById('confirm-overlay'))
+    document.getElementById('confirm-overlay').style.display = 'none';
+}
+function doMonthlyReset() {
+  document.getElementById('confirm-overlay').style.display = 'none';
+  items = items.filter(i => i.monthly);
+  items.forEach(i => i.done = false);
+  saveItems();
+}
+
+// ── Render ────────────────────────────────────────────────────────
+function render() {
+  let vis = items;
+  if (filter === 'active') vis = items.filter(i => !i.done);
+  if (filter === 'done') vis = items.filter(i => i.done);
+  if (filter === 'recurring') vis = items.filter(i => i.monthly);
+
+  const container = document.getElementById('list');
+  if (vis.length === 0) {
+    const msgs = { all:['Nothing here yet','Add your first item above'], active:['All done!','Everything is in the cart'], done:['Nothing checked off yet','Start checking things off'], recurring:['No monthly items','Toggle "Monthly" when adding staples'] };
+    const [t, s] = msgs[filter] || msgs.all;
+    container.innerHTML = `<div class="empty"><div class="empty-icon">🛒</div><div class="empty-text">${t}</div><div class="empty-sub">${s}</div></div>`;
+  } else {
+    const cats = [...new Set(vis.map(i => i.cat))];
+    let html = '';
+    cats.forEach(cat => {
+      const group = vis.filter(i => i.cat === cat);
+      html += `<div class="cat-group"><div class="cat-header"><span class="cat-dot ${CAT_COLORS[cat]||'c-other'}"></span><span class="cat-name">${CAT_LABELS[cat]||cat}</span></div>`;
+      group.forEach(item => {
+        html += `<div class="item${item.done?' done':''}">
+          <button class="check${item.done?' checked':''}" onclick="toggle(${item.id})"></button>
+          <span class="item-name">${esc(item.name)}</span>
+          ${item.qty?`<span class="item-qty">${esc(item.qty)}</span>`:''}
+          ${item.monthly?'<span class="badge-monthly">monthly</span>':''}
+          <button class="del" onclick="remove(${item.id})">✕</button>
+        </div>`;
+      });
+      html += '</div>';
+    });
+    container.innerHTML = html;
+  }
+  const done = items.filter(i => i.done).length;
+  const total = items.length;
+  document.getElementById('count').textContent = total ? `${done} of ${total} checked` : '';
+}
+
+function esc(str) {
+  return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+// ── Autocomplete ──────────────────────────────────────────────────
+function getHistoryList() {
+  const currentNames = new Set(items.map(i => i.name.toLowerCase()));
+  return Object.values(history).filter(i => !currentNames.has(i.name.toLowerCase()));
+}
+
+function showAC(query) {
+  const list = document.getElementById('ac-list');
+  const hist = getHistoryList();
+  if (!query) {
+    if (!hist.length) { list.style.display = 'none'; return; }
+    list.innerHTML = hist.slice(0,8).map((item,idx) => acRow(item,idx)).join('');
+    list.style.display = 'block'; acIndex = -1; return;
+  }
+  const q = query.toLowerCase();
+  const matches = hist.filter(i => i.name.toLowerCase().includes(q) && i.name.toLowerCase() !== q);
+  if (!matches.length) { list.style.display = 'none'; acIndex = -1; return; }
+  list.innerHTML = matches.slice(0,8).map((item,idx) => acRow(item,idx)).join('');
+  list.style.display = 'block'; acIndex = -1;
+}
+
+function acRow(item, idx) {
+  return `<div class="autocomplete-item" data-idx="${idx}" data-name="${esc(item.name)}" data-cat="${item.cat}" onmousedown="pickAC(event,'${esc(item.name)}','${item.cat}')">
+    <span class="autocomplete-item-dot" style="background:${CAT_DOT_COLORS[item.cat]||'#aaa'}"></span>
+    <span class="autocomplete-item-name">${esc(item.name)}</span>
+    <span class="autocomplete-item-meta">${CAT_LABELS[item.cat]||item.cat}</span>
+  </div>`;
+}
+
+function pickAC(e, name, cat) {
+  e.preventDefault();
+  document.getElementById('item-input').value = name;
+  document.getElementById('cat-select').value = cat;
+  document.getElementById('ac-list').style.display = 'none';
+  document.getElementById('qty-input').focus();
+}
+
+function hideAC() { setTimeout(() => { document.getElementById('ac-list').style.display = 'none'; acIndex = -1; }, 120); }
+
+function highlightAC(idx) {
+  document.querySelectorAll('.autocomplete-item').forEach((el,i) => el.classList.toggle('highlighted', i===idx));
+}
+
+const itemInput = document.getElementById('item-input');
+itemInput.addEventListener('input', e => showAC(e.target.value.trim()));
+itemInput.addEventListener('focus', e => showAC(e.target.value.trim()));
+itemInput.addEventListener('blur', hideAC);
+itemInput.addEventListener('keydown', e => {
+  const list = document.getElementById('ac-list');
+  const rows = list.querySelectorAll('.autocomplete-item');
+  if (list.style.display !== 'none' && rows.length) {
+    if (e.key==='ArrowDown') { e.preventDefault(); acIndex=Math.min(acIndex+1,rows.length-1); highlightAC(acIndex); return; }
+    if (e.key==='ArrowUp') { e.preventDefault(); acIndex=Math.max(acIndex-1,-1); highlightAC(acIndex); return; }
+    if (e.key==='Enter' && acIndex>=0) { const row=rows[acIndex]; itemInput.value=row.dataset.name; document.getElementById('cat-select').value=row.dataset.cat; list.style.display='none'; acIndex=-1; document.getElementById('qty-input').focus(); return; }
+    if (e.key==='Escape') { list.style.display='none'; acIndex=-1; return; }
+  }
+  if (e.key==='Enter') addItem();
+});
+
+// ── Barcode Scanner ───────────────────────────────────────────────
+// Called by native Android when barcode detected
+window.onNativeBarcodeScanned = async function(barcode) {
+  await lookupBarcode(barcode);
+};
+
+async function handleScanImage(event) {
+  const file = event.target.files[0];
+  event.target.value = '';
+  if (!file) return;
+
+  // Show loading
+  document.getElementById('barcode-title').textContent = 'Reading barcode…';
+  document.getElementById('barcode-body').textContent = '';
+  document.getElementById('barcode-name-edit').style.display = 'none';
+  document.getElementById('barcode-overlay').style.display = 'flex';
+
+  // Try native BarcodeDetector (Chrome/Edge Android)
+  if ('BarcodeDetector' in window) {
+    try {
+      const detector = new BarcodeDetector({
+        formats: ['ean_13','ean_8','upc_a','upc_e','code_128','code_39','itf','codabar','qr_code']
+      });
+      const bitmap = await createImageBitmap(file);
+      const barcodes = await detector.detect(bitmap);
+      if (barcodes && barcodes.length > 0) {
+        await lookupBarcode(barcodes[0].rawValue);
+        return;
+      }
+    } catch(e) {}
+  }
+
+  // Fallback: barcode-detector polyfill
+  try {
+    const { BarcodeDetectorPolyfill } = await import('https://cdn.jsdelivr.net/npm/barcode-detector@2/dist/es/pure.js');
+    const detector = new BarcodeDetectorPolyfill({ formats: ['ean_13','ean_8','upc_a','upc_e','code_128'] });
+    const bitmap = await createImageBitmap(file);
+    const barcodes = await detector.detect(bitmap);
+    if (barcodes && barcodes.length > 0) {
+      await lookupBarcode(barcodes[0].rawValue);
+      return;
+    }
+  } catch(e) {}
+
+  // Nothing worked - show manual entry
+  document.getElementById('barcode-title').textContent = 'Could not read barcode';
+  document.getElementById('barcode-body').textContent = 'Try a clearer photo in good lighting, or type the item name.';
+  document.getElementById('barcode-name-edit').style.display = 'block';
+  document.getElementById('barcode-name-edit').value = '';
+  barcodeProduct = { name: '', brand: '', cat: 'pantry' };
+  setTimeout(() => document.getElementById('barcode-name-edit').focus(), 300);
+}
+
+async function lookupBarcode(barcode) {
+  document.getElementById('barcode-title').textContent = 'Looking up product…';
+  document.getElementById('barcode-body').textContent = '';
+  document.getElementById('barcode-name-edit').style.display = 'none';
+  document.getElementById('barcode-overlay').style.display = 'flex';
+
+  let name = '', brand = '', cat = 'pantry';
+
+  try {
+    const res = await fetch('https://world.openfoodfacts.org/api/v0/product/' + barcode + '.json');
+    const data = await res.json();
+    if (data.status === 1 && data.product) {
+      const p = data.product;
+      name = p.product_name_en || p.product_name || '';
+      brand = p.brands || '';
+      cat = guessCategory((p.categories_tags || []).join(' '), name);
+    }
+  } catch(e) {}
+
+  if (!name) {
+    try {
+      const res = await fetch('https://api.upcitemdb.com/prod/trial/lookup?upc=' + barcode);
+      const data = await res.json();
+      if (data.items && data.items[0]) {
+        name = data.items[0].title || '';
+        brand = data.items[0].brand || '';
+        cat = guessCategory(data.items[0].category || '', name);
+      }
+    } catch(e) {}
+  }
+
+  barcodeProduct = { name, brand: brand || ('Barcode: ' + barcode), cat };
+
+  if (name) {
+    document.getElementById('barcode-title').textContent = name;
+    document.getElementById('barcode-body').textContent = barcodeProduct.brand;
+    document.getElementById('barcode-name-edit').style.display = 'none';
+  } else {
+    document.getElementById('barcode-title').textContent = 'Product not found';
+    document.getElementById('barcode-body').textContent = 'Barcode: ' + barcode;
+    document.getElementById('barcode-name-edit').style.display = 'block';
+    document.getElementById('barcode-name-edit').value = '';
+    setTimeout(() => document.getElementById('barcode-name-edit').focus(), 300);
+  }
+}
+
+function closeBarcodeDialog(e) {
+  if (!e || e.target === document.getElementById('barcode-overlay'))
+    document.getElementById('barcode-overlay').style.display = 'none';
+}
+
+function addBarcodeItem() {
+  const editEl = document.getElementById('barcode-name-edit');
+  const name = editEl.style.display !== 'none' ? editEl.value.trim() : (barcodeProduct && barcodeProduct.name);
+  if (!name) return;
+  document.getElementById('item-input').value = name;
+  document.getElementById('cat-select').value = (barcodeProduct && barcodeProduct.cat) || 'other';
+  document.getElementById('barcode-overlay').style.display = 'none';
+  document.getElementById('item-input').focus();
+}
+
+function guessCategory(cats, name) {
+  const s = (cats + ' ' + name).toLowerCase();
+  if (/dairy|milk|cheese|yogurt|butter|cream/.test(s)) return 'dairy';
+  if (/meat|beef|chicken|pork|fish|seafood|poultry/.test(s)) return 'meat';
+  if (/frozen/.test(s)) return 'frozen';
+  if (/fruit|vegetable|produce|fresh/.test(s)) return 'produce';
+  if (/cleaning|household|detergent|paper|soap|hygiene/.test(s)) return 'household';
+  return 'pantry';
+}
+
+// ── Monthly auto-reset ────────────────────────────────────────────
+function checkMonthlyReset() {
+  const key = 'ourlist_monthly';
+  const mk = new Date().getFullYear() + '-' + new Date().getMonth();
+  try {
+    const last = localStorage.getItem(key);
+    if (last !== mk) {
+      localStorage.setItem(key, mk);
+      if (last !== null) {
+        items = items.filter(i => i.monthly);
+        items.forEach(i => i.done = false);
+        saveItems();
+      }
+    }
+  } catch(e) {}
+}
+
+checkMonthlyReset();
+</script>
+</body>
+</html>
