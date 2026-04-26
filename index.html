@@ -199,7 +199,7 @@
         <label class="scan-btn">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16"><rect x="3" y="3" width="5" height="5" rx="1"/><rect x="16" y="3" width="5" height="5" rx="1"/><rect x="3" y="16" width="5" height="5" rx="1"/><line x1="16" y1="16" x2="21" y2="16"/><line x1="16" y1="19" x2="21" y2="19"/><line x1="19" y1="16" x2="19" y2="21"/></svg>
           Scan
-          <input type="file" accept="image/*" style="display:none;" onchange="handleScanImage(event)" />
+          <input type="file" accept="image/*" capture="environment" style="display:none;" onchange="handleScanImage(event)" />
         </label>
       </div>
       <div class="options-row">
@@ -522,9 +522,8 @@ itemInput.addEventListener('keydown', e => {
 });
 
 // ── Barcode Scanner ───────────────────────────────────────────────
-// Called by native Android when barcode detected
 window.onNativeBarcodeScanned = async function(barcode) {
-  await lookupBarcode(barcode);
+  await lookupAndFill(barcode);
 };
 
 async function handleScanImage(event) {
@@ -532,13 +531,9 @@ async function handleScanImage(event) {
   event.target.value = '';
   if (!file) return;
 
-  // Show loading
-  document.getElementById('barcode-title').textContent = 'Reading barcode…';
-  document.getElementById('barcode-body').textContent = '';
-  document.getElementById('barcode-name-edit').style.display = 'none';
-  document.getElementById('barcode-overlay').style.display = 'flex';
+  showBarcodeStatus('Reading barcode…');
 
-  // Try native BarcodeDetector (Chrome/Edge Android)
+  // Try native BarcodeDetector
   if ('BarcodeDetector' in window) {
     try {
       const detector = new BarcodeDetector({
@@ -547,39 +542,48 @@ async function handleScanImage(event) {
       const bitmap = await createImageBitmap(file);
       const barcodes = await detector.detect(bitmap);
       if (barcodes && barcodes.length > 0) {
-        await lookupBarcode(barcodes[0].rawValue);
+        await lookupAndFill(barcodes[0].rawValue);
         return;
       }
     } catch(e) {}
   }
 
-  // Fallback: barcode-detector polyfill
+  // Fallback: send image to online barcode decoder
   try {
-    const { BarcodeDetectorPolyfill } = await import('https://cdn.jsdelivr.net/npm/barcode-detector@2/dist/es/pure.js');
-    const detector = new BarcodeDetectorPolyfill({ formats: ['ean_13','ean_8','upc_a','upc_e','code_128'] });
-    const bitmap = await createImageBitmap(file);
-    const barcodes = await detector.detect(bitmap);
-    if (barcodes && barcodes.length > 0) {
-      await lookupBarcode(barcodes[0].rawValue);
+    const formData = new FormData();
+    formData.append('f', file);
+    const res = await fetch('https://api.qrserver.com/v1/read-qr-code/', { method: 'POST', body: formData });
+    const data = await res.json();
+    if (data && data[0] && data[0].symbol && data[0].symbol[0] && data[0].symbol[0].data) {
+      await lookupAndFill(data[0].symbol[0].data);
       return;
     }
   } catch(e) {}
 
-  // Nothing worked - show manual entry
-  document.getElementById('barcode-title').textContent = 'Could not read barcode';
-  document.getElementById('barcode-body').textContent = 'Try a clearer photo in good lighting, or type the item name.';
-  document.getElementById('barcode-name-edit').style.display = 'block';
-  document.getElementById('barcode-name-edit').value = '';
-  barcodeProduct = { name: '', brand: '', cat: 'pantry' };
-  setTimeout(() => document.getElementById('barcode-name-edit').focus(), 300);
+  // Could not read
+  showBarcodeStatus('Could not read barcode — try better lighting or type the name manually');
+  setTimeout(() => hideBarcodeStatus(), 4000);
 }
 
-async function lookupBarcode(barcode) {
-  document.getElementById('barcode-title').textContent = 'Looking up product…';
-  document.getElementById('barcode-body').textContent = '';
-  document.getElementById('barcode-name-edit').style.display = 'none';
-  document.getElementById('barcode-overlay').style.display = 'flex';
+function showBarcodeStatus(msg) {
+  let el = document.getElementById('barcode-status');
+  if (!el) {
+    el = document.createElement('div');
+    el.id = 'barcode-status';
+    el.style.cssText = 'position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:#1C1917;color:white;padding:10px 20px;border-radius:20px;font-size:13px;z-index:999;white-space:nowrap;max-width:90vw;text-align:center;';
+    document.body.appendChild(el);
+  }
+  el.textContent = msg;
+  el.style.display = 'block';
+}
 
+function hideBarcodeStatus() {
+  const el = document.getElementById('barcode-status');
+  if (el) el.style.display = 'none';
+}
+
+async function lookupAndFill(barcode) {
+  showBarcodeStatus('Looking up product…');
   let name = '', brand = '', cat = 'pantry';
 
   try {
@@ -605,34 +609,22 @@ async function lookupBarcode(barcode) {
     } catch(e) {}
   }
 
-  barcodeProduct = { name, brand: brand || ('Barcode: ' + barcode), cat };
+  hideBarcodeStatus();
 
   if (name) {
-    document.getElementById('barcode-title').textContent = name;
-    document.getElementById('barcode-body').textContent = barcodeProduct.brand;
-    document.getElementById('barcode-name-edit').style.display = 'none';
+    // Auto-fill the fields directly
+    document.getElementById('item-input').value = name;
+    document.getElementById('cat-select').value = cat;
+    document.getElementById('qty-input').focus();
+    showBarcodeStatus('Found: ' + name);
+    setTimeout(() => hideBarcodeStatus(), 3000);
   } else {
-    document.getElementById('barcode-title').textContent = 'Product not found';
-    document.getElementById('barcode-body').textContent = 'Barcode: ' + barcode;
-    document.getElementById('barcode-name-edit').style.display = 'block';
-    document.getElementById('barcode-name-edit').value = '';
-    setTimeout(() => document.getElementById('barcode-name-edit').focus(), 300);
+    // Not found - let user type name
+    document.getElementById('item-input').value = '';
+    document.getElementById('item-input').focus();
+    showBarcodeStatus('Product not found — type the name manually');
+    setTimeout(() => hideBarcodeStatus(), 4000);
   }
-}
-
-function closeBarcodeDialog(e) {
-  if (!e || e.target === document.getElementById('barcode-overlay'))
-    document.getElementById('barcode-overlay').style.display = 'none';
-}
-
-function addBarcodeItem() {
-  const editEl = document.getElementById('barcode-name-edit');
-  const name = editEl.style.display !== 'none' ? editEl.value.trim() : (barcodeProduct && barcodeProduct.name);
-  if (!name) return;
-  document.getElementById('item-input').value = name;
-  document.getElementById('cat-select').value = (barcodeProduct && barcodeProduct.cat) || 'other';
-  document.getElementById('barcode-overlay').style.display = 'none';
-  document.getElementById('item-input').focus();
 }
 
 function guessCategory(cats, name) {
