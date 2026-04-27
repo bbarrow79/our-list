@@ -207,6 +207,7 @@
         <div class="autocomplete-wrap">
           <input type="text" id="item-input" class="text-input" placeholder="What do you need?" autocomplete="off" />
           <div class="autocomplete-list" id="ac-list" style="display:none;"></div>
+          <button id="clear-scan-btn" onclick="clearScan()" style="display:none;position:absolute;right:8px;top:50%;transform:translateY(-50%);background:var(--terracotta);color:white;border:none;border-radius:6px;padding:3px 8px;font-size:11px;cursor:pointer;font-family:'DM Sans',sans-serif;">✕ Clear</button>
         </div>
         <input type="text" id="qty-input" class="text-input qty-field" placeholder="Qty" />
         <button class="scan-btn" onclick="openScanner()">
@@ -405,6 +406,7 @@ function addItem() {
   document.getElementById('qty-input').value = '';
   document.getElementById('monthly-check').checked = false;
   document.getElementById('ac-list').style.display = 'none';
+  document.getElementById('clear-scan-btn').style.display = 'none';
   nameEl.focus();
   saveItems();
 }
@@ -615,11 +617,13 @@ async function lookupAndFill(barcode) {
     document.getElementById('item-input').value = name;
     document.getElementById('cat-select').value = cat;
     document.getElementById('qty-input').focus();
+    document.getElementById('clear-scan-btn').style.display = 'block';
     showBarcodeStatus('✓ ' + name);
     setTimeout(hideBarcodeStatus, 3000);
   } else {
     document.getElementById('item-input').value = '';
     document.getElementById('item-input').focus();
+    document.getElementById('clear-scan-btn').style.display = 'none';
     showBarcodeStatus('Product not found — type the name');
     setTimeout(hideBarcodeStatus, 4000);
   }
@@ -640,6 +644,15 @@ function showBarcodeStatus(msg) {
 function hideBarcodeStatus() {
   const el = document.getElementById('barcode-status');
   if (el) el.style.display = 'none';
+}
+
+function clearScan() {
+  document.getElementById('item-input').value = '';
+  document.getElementById('qty-input').value = '';
+  document.getElementById('monthly-check').checked = false;
+  document.getElementById('cat-select').value = 'produce';
+  document.getElementById('clear-scan-btn').style.display = 'none';
+  document.getElementById('item-input').focus();
 }
 
 function guessCategory(cats, name) {
