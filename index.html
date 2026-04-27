@@ -11,6 +11,7 @@
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
+<script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
 <link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300;0,9..144,400;1,9..144,300&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet" />
 <style>
   *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
@@ -151,6 +152,18 @@
 
   .loading { text-align: center; padding: 48px 20px; color: var(--ink-faint); font-size: 14px; }
 
+
+  /* Scanner overlay */
+  .scanner-overlay { position:fixed; inset:0; background:#000; z-index:300; display:flex; flex-direction:column; }
+  .scanner-header { display:flex; align-items:center; justify-content:space-between; padding:20px; padding-top:calc(20px + env(safe-area-inset-top)); background:rgba(0,0,0,0.6); }
+  .scanner-title { font-family:'Fraunces',serif; font-size:20px; font-weight:300; color:white; font-style:italic; }
+  .scanner-close { background:rgba(255,255,255,0.15); border:none; color:white; width:36px; height:36px; border-radius:50%; font-size:20px; cursor:pointer; line-height:1; }
+  #qr-reader { width:100%; flex:1; background:#000; }
+  #qr-reader video { width:100% !important; height:100% !important; object-fit:cover; }
+  #qr-reader__scan_region { background:transparent !important; }
+  #qr-reader__dashboard { display:none !important; }
+  .scanner-hint { text-align:center; padding:16px; color:rgba(255,255,255,0.7); font-size:13px; }
+
   @media (max-width: 420px) {
     header { padding: 32px 0 20px; }
     .header-title { font-size: 34px; }
@@ -196,11 +209,10 @@
           <div class="autocomplete-list" id="ac-list" style="display:none;"></div>
         </div>
         <input type="text" id="qty-input" class="text-input qty-field" placeholder="Qty" />
-        <label class="scan-btn">
+        <button class="scan-btn" onclick="openScanner()">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16"><rect x="3" y="3" width="5" height="5" rx="1"/><rect x="16" y="3" width="5" height="5" rx="1"/><rect x="3" y="16" width="5" height="5" rx="1"/><line x1="16" y1="16" x2="21" y2="16"/><line x1="16" y1="19" x2="21" y2="19"/><line x1="19" y1="16" x2="19" y2="21"/></svg>
           Scan
-          <input type="file" accept="image/*" capture="environment" style="display:none;" onchange="handleScanImage(event)" />
-        </label>
+        </button>
       </div>
       <div class="options-row">
         <select id="cat-select" class="cat-select">
@@ -244,6 +256,17 @@
       </button>
     </div>
   </div>
+</div>
+
+
+<!-- Scanner Overlay -->
+<div class="scanner-overlay" id="scanner-overlay" style="display:none;">
+  <div class="scanner-header">
+    <span class="scanner-title">Scan item</span>
+    <button class="scanner-close" onclick="closeScanner()">✕</button>
+  </div>
+  <div id="qr-reader"></div>
+  <div class="scanner-hint" id="scanner-hint">Point camera at barcode</div>
 </div>
 
 <!-- Confirm Reset Dialog -->
@@ -522,64 +545,43 @@ itemInput.addEventListener('keydown', e => {
 });
 
 // ── Barcode Scanner ───────────────────────────────────────────────
+let html5QrCode = null;
+let scannerOpen = false;
+
 window.onNativeBarcodeScanned = async function(barcode) {
   await lookupAndFill(barcode);
 };
 
-async function handleScanImage(event) {
-  const file = event.target.files[0];
-  event.target.value = '';
-  if (!file) return;
-
-  showBarcodeStatus('Reading barcode…');
-
-  // Try native BarcodeDetector
-  if ('BarcodeDetector' in window) {
-    try {
-      const detector = new BarcodeDetector({
-        formats: ['ean_13','ean_8','upc_a','upc_e','code_128','code_39','itf','codabar','qr_code']
-      });
-      const bitmap = await createImageBitmap(file);
-      const barcodes = await detector.detect(bitmap);
-      if (barcodes && barcodes.length > 0) {
-        await lookupAndFill(barcodes[0].rawValue);
-        return;
-      }
-    } catch(e) {}
-  }
-
-  // Fallback: send image to online barcode decoder
-  try {
-    const formData = new FormData();
-    formData.append('f', file);
-    const res = await fetch('https://api.qrserver.com/v1/read-qr-code/', { method: 'POST', body: formData });
-    const data = await res.json();
-    if (data && data[0] && data[0].symbol && data[0].symbol[0] && data[0].symbol[0].data) {
-      await lookupAndFill(data[0].symbol[0].data);
-      return;
-    }
-  } catch(e) {}
-
-  // Could not read
-  showBarcodeStatus('Could not read barcode — try better lighting or type the name manually');
-  setTimeout(() => hideBarcodeStatus(), 4000);
+function openScanner() {
+  if (window.NativeScanner) { NativeScanner.openScanner(); return; }
+  document.getElementById('scanner-overlay').style.display = 'flex';
+  scannerOpen = true;
+  if (!html5QrCode) html5QrCode = new Html5Qrcode('qr-reader');
+  Html5Qrcode.getCameras().then(cameras => {
+    if (!cameras.length) { document.getElementById('scanner-hint').textContent = 'No camera found'; return; }
+    const backCamera = cameras.find(c => /back|rear|environment/i.test(c.label)) || cameras[cameras.length - 1];
+    html5QrCode.start(
+      backCamera.id,
+      { fps: 10, qrbox: { width: 250, height: 250 } },
+      async (barcode) => {
+        await closeScanner();
+        await lookupAndFill(barcode);
+      },
+      () => {}
+    ).catch(err => {
+      document.getElementById('scanner-hint').textContent = 'Camera error: ' + err;
+    });
+  }).catch(err => {
+    document.getElementById('scanner-hint').textContent = 'Camera error: ' + err;
+  });
 }
 
-function showBarcodeStatus(msg) {
-  let el = document.getElementById('barcode-status');
-  if (!el) {
-    el = document.createElement('div');
-    el.id = 'barcode-status';
-    el.style.cssText = 'position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:#1C1917;color:white;padding:10px 20px;border-radius:20px;font-size:13px;z-index:999;white-space:nowrap;max-width:90vw;text-align:center;';
-    document.body.appendChild(el);
+async function closeScanner() {
+  scannerOpen = false;
+  document.getElementById('scanner-overlay').style.display = 'none';
+  if (html5QrCode && html5QrCode.isScanning) {
+    try { await html5QrCode.stop(); } catch(e) {}
   }
-  el.textContent = msg;
-  el.style.display = 'block';
-}
-
-function hideBarcodeStatus() {
-  const el = document.getElementById('barcode-status');
-  if (el) el.style.display = 'none';
 }
 
 async function lookupAndFill(barcode) {
@@ -609,22 +611,35 @@ async function lookupAndFill(barcode) {
     } catch(e) {}
   }
 
-  hideBarcodeStatus();
-
   if (name) {
-    // Auto-fill the fields directly
     document.getElementById('item-input').value = name;
     document.getElementById('cat-select').value = cat;
     document.getElementById('qty-input').focus();
-    showBarcodeStatus('Found: ' + name);
-    setTimeout(() => hideBarcodeStatus(), 3000);
+    showBarcodeStatus('✓ ' + name);
+    setTimeout(hideBarcodeStatus, 3000);
   } else {
-    // Not found - let user type name
     document.getElementById('item-input').value = '';
     document.getElementById('item-input').focus();
-    showBarcodeStatus('Product not found — type the name manually');
-    setTimeout(() => hideBarcodeStatus(), 4000);
+    showBarcodeStatus('Product not found — type the name');
+    setTimeout(hideBarcodeStatus, 4000);
   }
+}
+
+function showBarcodeStatus(msg) {
+  let el = document.getElementById('barcode-status');
+  if (!el) {
+    el = document.createElement('div');
+    el.id = 'barcode-status';
+    el.style.cssText = 'position:fixed;bottom:30px;left:50%;transform:translateX(-50%);background:#1C1917;color:white;padding:10px 20px;border-radius:20px;font-size:13px;z-index:999;white-space:nowrap;max-width:90vw;text-align:center;';
+    document.body.appendChild(el);
+  }
+  el.textContent = msg;
+  el.style.display = 'block';
+}
+
+function hideBarcodeStatus() {
+  const el = document.getElementById('barcode-status');
+  if (el) el.style.display = 'none';
 }
 
 function guessCategory(cats, name) {
