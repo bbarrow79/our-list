@@ -626,8 +626,8 @@ async function lookupAndFill(barcode) {
     document.getElementById('item-input').value = '';
     document.getElementById('item-input').focus();
     document.getElementById('clear-scan-btn').style.display = 'none';
-    showBarcodeStatus('Product not found — type the name');
-    setTimeout(hideBarcodeStatus, 4000);
+    showBarcodeStatus('⚠️ Product not found — please type the item name manually');
+    setTimeout(hideBarcodeStatus, 6000);
   }
 }
 
@@ -640,6 +640,7 @@ function showBarcodeStatus(msg) {
     document.body.appendChild(el);
   }
   el.textContent = msg;
+  el.style.background = msg.includes('⚠️') ? '#B55E3A' : '#1C1917';
   el.style.display = 'block';
 }
 
