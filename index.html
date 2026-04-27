@@ -636,7 +636,7 @@ function showBarcodeStatus(msg) {
   if (!el) {
     el = document.createElement('div');
     el.id = 'barcode-status';
-    el.style.cssText = 'position:fixed;bottom:30px;left:50%;transform:translateX(-50%);background:#1C1917;color:white;padding:10px 20px;border-radius:20px;font-size:13px;z-index:999;white-space:nowrap;max-width:90vw;text-align:center;';
+    el.style.cssText = 'position:fixed;top:20px;left:50%;transform:translateX(-50%);background:#1C1917;color:white;padding:14px 24px;border-radius:12px;font-size:15px;font-weight:500;z-index:9999;max-width:90vw;text-align:center;box-shadow:0 4px 20px rgba(0,0,0,0.3);';
     document.body.appendChild(el);
   }
   el.textContent = msg;
