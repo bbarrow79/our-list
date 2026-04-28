@@ -431,7 +431,10 @@ function setFilter(f, btn) {
 }
 
 function clearChecked() {
-  items = items.filter(i => !i.done);
+  // Remove non-monthly checked items
+  items = items.filter(i => !i.done || i.monthly);
+  // Uncheck any monthly items that were checked
+  items.forEach(i => { if (i.monthly && i.done) i.done = false; });
   saveItems();
 }
 
