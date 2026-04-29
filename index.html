@@ -399,6 +399,14 @@ function addItem() {
   const nameEl = document.getElementById('item-input');
   const name = nameEl.value.trim();
   if (!name) { nameEl.focus(); return; }
+  // Check for duplicate
+  const existing = items.find(i => i.name.toLowerCase() === name.toLowerCase());
+  if (existing) {
+    showBarcodeStatus('⚠️ ' + name + ' is already on the list');
+    setTimeout(hideBarcodeStatus, 3000);
+    nameEl.select();
+    return;
+  }
   const qty = document.getElementById('qty-input').value.trim();
   const cat = document.getElementById('cat-select').value;
   const monthly = document.getElementById('monthly-check').checked;
@@ -432,9 +440,9 @@ function setFilter(f, btn) {
 
 function clearChecked() {
   // Remove non-monthly checked items
-  items = items.filter(i => !i.done || i.monthly);
-  // Uncheck any monthly items that were checked
-  items.forEach(i => { if (i.monthly && i.done) i.done = false; });
+  // Uncheck monthly checked items but keep them on list
+  items.forEach(i => { if (i.done && i.monthly) i.done = false; });
+  items = items.filter(i => !i.done);
   saveItems();
 }
 
@@ -447,7 +455,9 @@ function closeConfirm(e) {
 }
 function doMonthlyReset() {
   document.getElementById('confirm-overlay').style.display = 'none';
+  // Remove ALL non-monthly items (checked or not)
   items = items.filter(i => i.monthly);
+  // Uncheck all monthly items
   items.forEach(i => i.done = false);
   saveItems();
 }
