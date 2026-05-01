@@ -698,7 +698,7 @@ function checkMonthlyReset() {
   } catch(e) {}
 }
 
-checkMonthlyReset();
+// Do NOT call checkMonthlyReset() here — it runs inside render() after Firebase loads
 </script>
 </body>
 </html>
